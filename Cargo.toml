@@ -1,0 +1,46 @@
+[package]
+name = "vortex-wasm"
+version = "0.1.0"
+authors = ["Andrew Duffy <andreweduffy@gmail.com>"]
+edition = "2018"
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["console_error_panic_hook"]
+
+[dependencies]
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = { version = "0.4" }
+
+# The `console_error_panic_hook` crate provides better debugging of panics by
+# logging them with `console.error`. This is great for development, but requires
+# all the `std::fmt` and `std::panicking` infrastructure, so isn't great for
+# code size when deploying.
+console_error_panic_hook = { version = "0.1.7", optional = true }
+vortex = { git = "https://github.com/spiraldb/vortex.git", rev = "2eeeff6" }
+#js-sys = "0.3"
+web-sys = { version = "0.3", features = [
+    "Blob",
+    "File",
+    "FileReader",
+    'ReadableStream',
+    "ReadableStreamByobReader",
+    "ReadableStreamByobRequest",
+    "ReadableStreamDefaultReader",
+    "ReadableStreamReadResult",
+    "ReadableStreamReaderMode",
+    "ReadableStreamGetReaderOptions",
+] }
+bytes = "1.9.0"
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3.34"
+
+[profile.release]
+# Tell `rustc` to optimize for small code size.
+opt-level = "s"
