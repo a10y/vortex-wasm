@@ -26,6 +26,7 @@ console_error_panic_hook = { version = "0.1.7", optional = true }
 vortex = { git = "https://github.com/spiraldb/vortex.git", rev = "2eeeff6" }
 #js-sys = "0.3"
 web-sys = { version = "0.3", features = [
+    "console",
     "Blob",
     "File",
     "FileReader",

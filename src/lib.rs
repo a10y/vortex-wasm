@@ -19,15 +19,6 @@ use web_sys::{
     ReadableStreamReaderMode,
 };
 
-#[wasm_bindgen]
-extern "C" {
-    #[wasm_bindgen(js_namespace = console)]
-    fn log(s: &str);
-
-    #[wasm_bindgen(js_namespace = console)]
-    fn error(s: &str);
-}
-
 #[wasm_bindgen(js_name = File)]
 pub struct VortexFile {
     buffer: Bytes,
@@ -35,19 +26,25 @@ pub struct VortexFile {
 
 #[wasm_bindgen(start)]
 fn start() {
-    log("vortex-wasm starting");
-    log("setting panic hook...");
+    web_sys::console::log_1(&"vortex-wasm starting".into());
+    web_sys::console::log_1(&"setting panic hook...".into());
     set_panic_hook();
+}
+
+/// A batch of a single column's worth of data.
+#[wasm_bindgen]
+pub struct ColumnBatch {
+    data: ArrayData,
 }
 
 #[wasm_bindgen(js_class = File)]
 impl VortexFile {
     /// Read from a blob into the allocation at the provided base address.
     #[wasm_bindgen(js_name = fromBlob)]
-    pub async fn from_blob(value: JsValue) -> Self {
-        let blob = value.dyn_into::<Blob>().expect("expected a blob");
+    pub async fn from_blob(blob: Blob) -> Self {
+        // let blob = value.dyn_into::<Blob>().expect("expected a blob");
         let len = blob.size() as u32;
-        log(&format!("blob size = {}", blob.size()));
+        web_sys::console::log_1(&format!("blob size = {}", blob.size()).into());
         let reader_opts = ReadableStreamGetReaderOptions::new();
         reader_opts.set_mode(ReadableStreamReaderMode::Byob);
 
@@ -114,8 +111,8 @@ impl VortexFile {
         .await
         .expect("building reader");
 
-        log(format!("dtype = {}", reader.dtype()).as_str());
-        log(format!("row_count = {}", reader.row_count()).as_str());
+        web_sys::console::log_1(&format!("dtype = {}", reader.dtype()).into());
+        web_sys::console::log_1(&format!("row_count = {}", reader.row_count()).into());
     }
 
     /// Materialize the entire array.
@@ -136,7 +133,7 @@ impl VortexFile {
         let mut chunks = Vec::new();
         while let Some(next) = reader.next().await {
             let next = next.unwrap();
-            log(&format!("loaded another chunk if len {}", next.len()));
+            web_sys::console::log_1(&format!("loaded another chunk if len {}", next.len()).into());
             chunks.push(next);
         }
 
