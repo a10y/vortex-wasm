@@ -4,12 +4,13 @@ use crate::utils::set_panic_hook;
 use bytes::{Bytes, BytesMut};
 use futures_util::StreamExt;
 use std::convert::Into;
+use vortex::array::ChunkedArray;
 use vortex::compute::scalar_at;
 use vortex::dtype::{DType, PType};
 use vortex::file::{LayoutContext, LayoutDeserializer, VortexReadBuilder};
 use vortex::sampling_compressor::ALL_ENCODINGS_CONTEXT;
 use vortex::scalar::Scalar;
-use vortex::ArrayData;
+use vortex::{ArrayData, IntoArrayData};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::js_sys::{Map, Object, Uint8Array};
@@ -26,7 +27,6 @@ extern "C" {
     #[wasm_bindgen(js_namespace = console)]
     fn error(s: &str);
 }
-
 
 #[wasm_bindgen(js_name = File)]
 pub struct VortexFile {
@@ -110,17 +110,17 @@ impl VortexFile {
                 LayoutContext::default().into(),
             ),
         )
-            .build()
-            .await
-            .expect("building reader");
+        .build()
+        .await
+        .expect("building reader");
 
         log(format!("dtype = {}", reader.dtype()).as_str());
         log(format!("row_count = {}", reader.row_count()).as_str());
     }
 
-    /// Load the next set of data.
+    /// Materialize the entire array.
     #[wasm_bindgen]
-    pub async fn load(&self) -> Array {
+    pub async fn collect(&self) -> Array {
         let mut reader = VortexReadBuilder::new(
             self.buffer.clone(),
             LayoutDeserializer::new(
@@ -128,15 +128,21 @@ impl VortexFile {
                 LayoutContext::default().into(),
             ),
         )
-            .build()
-            .await
-            .expect("building reader");
+        .build()
+        .await
+        .expect("building reader");
 
-        let data = reader.next().await.unwrap().unwrap();
-
-        Array {
-            inner: data
+        let dtype = reader.dtype().clone();
+        let mut chunks = Vec::new();
+        while let Some(next) = reader.next().await {
+            let next = next.unwrap();
+            log(&format!("loaded another chunk if len {}", next.len()));
+            chunks.push(next);
         }
+
+        let chunked = ChunkedArray::try_new(chunks, dtype).unwrap().into_array();
+
+        Array { inner: chunked }
     }
 }
 
@@ -144,7 +150,6 @@ impl VortexFile {
 pub struct Array {
     inner: ArrayData,
 }
-
 
 #[wasm_bindgen]
 impl Array {
@@ -158,71 +163,65 @@ impl Array {
 fn to_js_val(scalar: Scalar) -> JsValue {
     match scalar.dtype() {
         DType::Null => JsValue::null(),
-        DType::Bool(_) => {
-            scalar.as_bool().value()
-                .map(JsValue::from_bool)
-                .unwrap_or_else(|| JsValue::null())
-        }
+        DType::Bool(_) => scalar
+            .as_bool()
+            .value()
+            .map(JsValue::from_bool)
+            .unwrap_or_else(|| JsValue::null()),
         DType::Primitive(ptype, _) => {
             // The scalar needs to be up-cast to f64 because that is all
             // JavaScript can represent.
             let maybe_f64_scalar = match ptype {
-                PType::U8 => {
-                    scalar.as_primitive().typed_value::<u8>()
-                        .map(JsValue::from)
-                }
-                PType::U16 => {
-                    scalar.as_primitive().typed_value::<u16>()
-                        .map(JsValue::from)
-                }
-                PType::U32 => {
-                    scalar.as_primitive().typed_value::<u32>()
-                        .map(JsValue::from)
-                }
-                PType::U64 => {
-                    scalar.as_primitive().typed_value::<u64>()
-                        .map(JsValue::from)
-                }
-                PType::I8 => {
-                    scalar.as_primitive().typed_value::<i8>()
-                        .map(JsValue::from)
-                }
-                PType::I16 => {
-                    scalar.as_primitive().typed_value::<i16>()
-                        .map(JsValue::from)
-                }
-                PType::I32 => {
-                    scalar.as_primitive().typed_value::<i32>()
-                        .map(JsValue::from)
-                }
-                PType::I64 => {
-                    scalar.as_primitive().typed_value::<i64>()
-                        .map(JsValue::from)
-                }
+                PType::U8 => scalar.as_primitive().typed_value::<u8>().map(JsValue::from),
+                PType::U16 => scalar
+                    .as_primitive()
+                    .typed_value::<u16>()
+                    .map(JsValue::from),
+                PType::U32 => scalar
+                    .as_primitive()
+                    .typed_value::<u32>()
+                    .map(JsValue::from),
+                PType::U64 => scalar
+                    .as_primitive()
+                    .typed_value::<u64>()
+                    .map(JsValue::from),
+                PType::I8 => scalar.as_primitive().typed_value::<i8>().map(JsValue::from),
+                PType::I16 => scalar
+                    .as_primitive()
+                    .typed_value::<i16>()
+                    .map(JsValue::from),
+                PType::I32 => scalar
+                    .as_primitive()
+                    .typed_value::<i32>()
+                    .map(JsValue::from),
+                PType::I64 => scalar
+                    .as_primitive()
+                    .typed_value::<i64>()
+                    .map(JsValue::from),
                 PType::F16 => {
                     panic!("invalid type");
                 }
-                PType::F32 => {
-                    scalar.as_primitive().typed_value::<f32>()
-                        .map(JsValue::from)
-                }
-                PType::F64 => {
-                    scalar.as_primitive().typed_value::<f64>()
-                        .map(JsValue::from)
-                }
+                PType::F32 => scalar
+                    .as_primitive()
+                    .typed_value::<f32>()
+                    .map(JsValue::from),
+                PType::F64 => scalar
+                    .as_primitive()
+                    .typed_value::<f64>()
+                    .map(JsValue::from),
             };
 
             // fallback to null
             maybe_f64_scalar.unwrap_or_else(|| JsValue::null())
         }
-        DType::Utf8(_) => {
-            scalar.as_utf8()
-                .value()
-                .map(|string| JsValue::from_str(string.as_str()))
-                .unwrap_or_else(|| JsValue::null())
-        }
+        DType::Utf8(_) => scalar
+            .as_utf8()
+            .value()
+            .map(|string| JsValue::from_str(string.as_str()))
+            .unwrap_or_else(|| JsValue::null()),
         DType::Binary(_) => {
-            scalar.as_binary()
+            scalar
+                .as_binary()
                 .value()
                 .map(|binary| {
                     // Copy the data into the Uint8Array.
@@ -235,11 +234,7 @@ fn to_js_val(scalar: Scalar) -> JsValue {
         DType::Struct(_, _) => {
             // recursively generate the struct
             let struct_scalar = scalar.as_struct();
-            let field_names = struct_scalar.dtype()
-                .as_struct()
-                .unwrap()
-                .names()
-                .clone();
+            let field_names = struct_scalar.dtype().as_struct().unwrap().names().clone();
             let Some(fields) = struct_scalar.fields() else {
                 return JsValue::null();
             };
@@ -257,8 +252,6 @@ fn to_js_val(scalar: Scalar) -> JsValue {
         DType::List(_, _) => {
             panic!("lol");
         }
-        DType::Extension(_) => {
-            JsValue::from_str("fix handling of ExtensionDType")
-        }
+        DType::Extension(_) => JsValue::from_str("fix handling of ExtensionDType"),
     }
 }
