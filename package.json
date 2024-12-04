@@ -1,0 +1,21 @@
+{
+  "name": "a10y-vortex",
+  "version": "0.1.2",
+  "description": "Vortex WASM bindings (WIP)",
+  "browser": "vortex.js",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "files": [
+    "vortex.js",
+    "pkg/vortex_wasm.js",
+    "pkg/vortex_wasm_bg.wasm",
+    "pkg/vortex_wasm_bg.wasm.d.ts"
+  ]
+}
