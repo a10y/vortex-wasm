@@ -138,7 +138,7 @@ impl VortexFile {
         let mut chunks = Vec::new();
         while let Some(next) = reader.next().await {
             let next = next.unwrap();
-            web_sys::console::log_1(&format!("loaded another chunk if len {}", next.len()).into());
+            web_sys::console::log_1(&format!("loaded another chunk of len {}", next.len()).into());
             chunks.push(next);
         }
 
@@ -182,7 +182,6 @@ impl ArrayBatch {
     /// Returns `undefined` for all other types.
     #[wasm_bindgen]
     pub fn columns(&self) -> JsValue {
-        // Get a list of column names.
         let Some(struct_array) = self.inner.as_struct_array() else {
             return JsValue::undefined()
         };
@@ -194,6 +193,21 @@ impl ArrayBatch {
         }
 
         names.into()
+    }
+
+    /// Get the WASM bindgen types.
+    #[wasm_bindgen]
+    pub fn types(&self) -> JsValue {
+        let Some(struct_array) = self.inner.as_struct_array() else {
+            return JsValue::undefined()
+        };
+
+        let dtypes = js_sys::Array::new();
+        for dtype in struct_array.dtypes() {
+            dtypes.push(&JsValue::from_str(dtype.to_string().as_str()));
+        }
+
+        dtypes.into()
     }
 
     // Get the column from an array.
