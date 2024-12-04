@@ -1,6 +1,6 @@
 {
   "name": "a10y-vortex",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Vortex WASM bindings (WIP)",
   "type": "module",
   "module": "./vortex.js",
