@@ -1,9 +1,10 @@
 mod utils;
 
-use crate::utils::set_panic_hook;
-use bytes::{Bytes, BytesMut};
+use crate::utils::{set_panic_hook, BlobReader};
+use bytes::BytesMut;
 use futures_util::StreamExt;
 use std::convert::Into;
+use std::sync::Arc;
 use vortex::array::ChunkedArray;
 use vortex::compute::scalar_at;
 use vortex::dtype::{DType, PType};
@@ -21,7 +22,7 @@ use web_sys::{
 
 #[wasm_bindgen(js_name = File)]
 pub struct VortexFile {
-    buffer: Bytes,
+    reader: BlobReader,
 }
 
 #[wasm_bindgen(start)]
@@ -31,17 +32,18 @@ fn start() {
     set_panic_hook();
 }
 
-/// A batch of a single column's worth of data.
-#[wasm_bindgen]
-pub struct ColumnBatch {
-    data: ArrayData,
-}
-
 #[wasm_bindgen(js_class = File)]
 impl VortexFile {
-    /// Read from a blob into the allocation at the provided base address.
     #[wasm_bindgen(js_name = fromBlob)]
     pub async fn from_blob(blob: Blob) -> Self {
+        Self {
+            reader: BlobReader(Arc::new(blob)),
+        }
+    }
+
+    /// Read from a blob into the allocation at the provided base address.
+    #[wasm_bindgen(js_name = fromBlobOld)]
+    pub async fn from_blob_old(blob: Blob) -> Self {
         // let blob = value.dyn_into::<Blob>().expect("expected a blob");
         let len = blob.size() as u32;
         web_sys::console::log_1(&format!("blob size = {}", blob.size()).into());
@@ -91,17 +93,19 @@ impl VortexFile {
         // The data has been written to the byte range directly.
         // We have the buffer values available immediately.
         // We can access the JS-side reference to our memory.
-        Self {
-            buffer: target.freeze(),
-        }
+        // Self {
+        //     buffer: target.freeze(),
+        // }
+        todo!()
     }
 
     /// Log the DType to the console.
     #[wasm_bindgen(js_name = printSchema)]
     pub async fn print_schema(&self) {
-        let buffer = self.buffer.clone();
+        // let buffer = self.buffer.clone();
+        let inner = self.reader.clone();
         let reader = VortexReadBuilder::new(
-            buffer,
+            inner,
             LayoutDeserializer::new(
                 ALL_ENCODINGS_CONTEXT.clone(),
                 LayoutContext::default().into(),
@@ -119,7 +123,8 @@ impl VortexFile {
     #[wasm_bindgen]
     pub async fn collect(&self) -> Array {
         let mut reader = VortexReadBuilder::new(
-            self.buffer.clone(),
+            self.reader.clone(),
+            // self.buffer.clone(),
             LayoutDeserializer::new(
                 ALL_ENCODINGS_CONTEXT.clone(),
                 LayoutContext::default().into(),

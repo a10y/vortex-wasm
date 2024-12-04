@@ -14,6 +14,7 @@ crate-type = ["cdylib", "rlib"]
 default = ["console_error_panic_hook"]
 
 [dependencies]
+futures-channel = "0.3"
 futures-util = "0.3"
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = { version = "0.4" }
@@ -24,7 +25,7 @@ wasm-bindgen-futures = { version = "0.4" }
 # code size when deploying.
 console_error_panic_hook = { version = "0.1.7", optional = true }
 vortex = { git = "https://github.com/spiraldb/vortex.git", rev = "2eeeff6" }
-#js-sys = "0.3"
+js-sys = "0.3"
 web-sys = { version = "0.3", features = [
     "console",
     "Blob",
