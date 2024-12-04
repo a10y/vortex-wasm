@@ -6,7 +6,7 @@ use futures_util::StreamExt;
 use std::convert::Into;
 use std::sync::Arc;
 use vortex::array::ChunkedArray;
-use vortex::compute::scalar_at;
+use vortex::compute::{scalar_at, slice};
 use vortex::dtype::{DType, PType};
 use vortex::file::{LayoutContext, LayoutDeserializer, VortexReadBuilder};
 use vortex::sampling_compressor::ALL_ENCODINGS_CONTEXT;
@@ -111,9 +111,9 @@ impl VortexFile {
                 LayoutContext::default().into(),
             ),
         )
-        .build()
-        .await
-        .expect("building reader");
+            .build()
+            .await
+            .expect("building reader");
 
         web_sys::console::log_1(&format!("dtype = {}", reader.dtype()).into());
         web_sys::console::log_1(&format!("row_count = {}", reader.row_count()).into());
@@ -121,7 +121,7 @@ impl VortexFile {
 
     /// Materialize the entire array.
     #[wasm_bindgen]
-    pub async fn collect(&self) -> Array {
+    pub async fn collect(&self) -> ArrayBatch {
         let mut reader = VortexReadBuilder::new(
             self.reader.clone(),
             // self.buffer.clone(),
@@ -130,9 +130,9 @@ impl VortexFile {
                 LayoutContext::default().into(),
             ),
         )
-        .build()
-        .await
-        .expect("building reader");
+            .build()
+            .await
+            .expect("building reader");
 
         let dtype = reader.dtype().clone();
         let mut chunks = Vec::new();
@@ -144,21 +144,83 @@ impl VortexFile {
 
         let chunked = ChunkedArray::try_new(chunks, dtype).unwrap().into_array();
 
-        Array { inner: chunked }
+        ArrayBatch { inner: chunked }
     }
 }
 
 #[wasm_bindgen]
-pub struct Array {
+pub struct ArrayBatch {
     inner: ArrayData,
 }
 
+
 #[wasm_bindgen]
-impl Array {
+impl ArrayBatch {
+    /// Get the number of elements in this array.
     #[wasm_bindgen]
-    pub fn get(&self, index: u32) -> JsValue {
+    pub fn length(&self) -> u32 {
+        self.inner.len() as u32
+    }
+
+    /// Get the n-th value of an array.
+    #[wasm_bindgen]
+    pub fn scalar_at(&self, index: u32) -> JsValue {
         let scalar = scalar_at(&self.inner, index as usize).unwrap();
         to_js_val(scalar)
+    }
+
+    /// Slice the array to an element range.
+    #[wasm_bindgen]
+    pub fn slice(&self, start: u32, end: u32) -> Self {
+        Self {
+            inner: slice(&self.inner, start as usize, end as usize).unwrap(),
+        }
+    }
+
+    /// Return the column names if array is of Struct-type.
+    ///
+    /// Returns `undefined` for all other types.
+    #[wasm_bindgen]
+    pub fn columns(&self) -> JsValue {
+        // Get a list of column names.
+        let Some(struct_array) = self.inner.as_struct_array() else {
+            return JsValue::undefined()
+        };
+
+        // Get a column description for each name.
+        let names = js_sys::Array::new();
+        for name in struct_array.names().iter() {
+            names.push(&JsValue::from_str(name.as_ref()));
+        }
+
+        names.into()
+    }
+
+    // Get the column from an array.
+    #[wasm_bindgen]
+    pub fn column(&self, name: &str) -> Self {
+        let array = self.inner.as_struct_array()
+            .expect("StructArray")
+            .field_by_name(name)
+            .expect("field not found on struct");
+
+        Self {
+            inner: array
+        }
+    }
+
+    // Materialize the all the data as a JS Array.
+    //
+    // Note: This is very slow and should be avoided.
+    pub fn to_js(&self) -> JsValue {
+        let js_array = js_sys::Array::new();
+
+
+        for i in 0..self.length() {
+            js_array.push(&self.scalar_at(i));
+        }
+
+        js_array.into()
     }
 }
 
